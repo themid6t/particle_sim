@@ -1,7 +1,9 @@
 import pygame
 import random
 import math
+import time
 from dataclasses import dataclass
+from typing import List, Tuple, Optional
 
 @dataclass(frozen=True)
 class Particle:
@@ -12,144 +14,276 @@ class Particle:
     radius: float
     mass: float
 
-def update_position(p: Particle, dt: float):
-    return Particle(
-        x=p.x + p.vx * dt,
-        y=p.y + p.vy * dt,
-        vx=p.vx,
-        vy=p.vy,
-        radius=p.radius,
-        mass=p.mass
-    )
-
-def handle_wall_collision(p: Particle, width: int, height: int):
-    vx, vy, x, y = p.vx, p.vy, p.x, p.y
-
-    if x - p.radius < 0 or x + p.radius > width:
-        vx *= -1
-        x = max(p.radius, min(x, width - p.radius))
-    
-    if y - p.radius < 0 or y + p.radius > height:
-        vy *= -1
-        y = max(p.radius, min(y, height - p.radius))
-    
-    return Particle(
-        x=x,
-        y=y,
-        vx=vx,
-        vy=vy,
-        radius=p.radius,
-        mass=p.mass
-    )
-    
-def handle_particle_collision(p1: Particle, p2: Particle):
-    dx = p2.x - p1.x
-    dy = p2.y - p1.y
-    dist = math.hypot(dx, dy)
-
-    min_dist = p1.radius + p2.radius
-    if dist >= min_dist or dist == 0:
-        return p1, p2
-    
-    nx = dx / dist
-    ny = dy / dist
-    tx = -ny
-    ty = nx
-
-    dpTan1 = p1.vx * tx + p1.vy * ty
-    dpTan2 = p2.vx * tx + p2.vy * ty
-    dpNorm1 = p1.vx * nx + p1.vy * ny
-    dpNorm2 = p2.vx * nx + p2.vy * ny
-
-    m1, m2 = p1.mass, p2.mass
-
-    v1n = (dpNorm1 * (m1 - m2) + 2 * m2 * dpNorm2) / (m1 + m2)
-    v2n = (dpNorm2 * (m2 - m1) + 2 * m1 * dpNorm1) / (m1 + m2)
-
-    vx1 = tx * dpTan1 + nx * v1n
-    vy1 = ty * dpTan1 + ny * v1n
-    vx2 = tx * dpTan2 + nx * v2n
-    vy2 = ty * dpTan2 + ny * v2n
-
-    overlap = min_dist - dist
-    connection = overlap / (m1 + m2)
-    x1 = p1.x - nx * connection * m2
-    y1 = p1.y - ny * connection * m2
-    x2 = p2.x + nx * connection * m1
-    y2 = p2.y + ny * connection * m1
-
-    return (
-        Particle(x1, y1, vx1, vy1, p1.radius, p1.mass),
-        Particle(x2, y2, vx2, vy2, p2.radius, p2.mass)
-    )
-
-def sweep_and_prune(particles: list[Particle]):
-    n = len(particles)
-    if n < 2:
-        return particles[:]
-
-    indexed_particles = list(enumerate(particles))
-    endpoints = [(p.x - p.radius, True, i) for i, p in indexed_particles] + \
-                [(p.x + p.radius, False, i) for i, p in indexed_particles]
-    endpoints.sort()
-
-    active = set()
-    updated = particles[:]
-
-    for _, is_start, idx in endpoints:
-        if is_start:
-            for j in active:
-                updated[idx], updated[j] = handle_particle_collision(updated[idx], updated[j])
-            active.add(idx)
-        else:
-            active.remove(idx)
-
-    return updated
+class Profiler:
+    def __init__(self):
+        self.frame_times = []
+        self.collision_counts = []
+        self._start_time = None
+        self._collision_count = 0
+        
+    def start_frame(self):
+        self._start_time = time.time()
+        self._collision_count = 0
+        
+    def end_frame(self):
+        if self._start_time is not None:
+            frame_time = time.time() - self._start_time
+            self.frame_times.append(frame_time)
+            self.collision_counts.append(self._collision_count)
             
+    def record_collision(self):
+        self._collision_count += 1
+        
+    def get_stats(self) -> dict:
+        if not self.frame_times:
+            return {"avg_frame_time": 0, "avg_collisions": 0}
+            
+        # Keep only the last 100 frames for rolling average
+        if len(self.frame_times) > 100:
+            self.frame_times = self.frame_times[-100:]
+            self.collision_counts = self.collision_counts[-100:]
+            
+        return {
+            "avg_frame_time": sum(self.frame_times) / len(self.frame_times),
+            "avg_collisions": sum(self.collision_counts) / len(self.collision_counts),
+            "total_frames": len(self.frame_times)
+        }
+        
+    def print_stats(self):
+        stats = self.get_stats()
+        print(f"Avg frame time: {stats['avg_frame_time']*1000:.2f} ms, "
+              f"Avg collisions/frame: {stats['avg_collisions']:.2f}")
 
-def simulate_steps(particles, dt, width, height):
-    particles = [update_position(p, dt) for p in particles]
-    particles = [handle_wall_collision(p, width, height) for p in particles]
-    particles = sweep_and_prune(particles)
-    return particles
 
-def create_particles(n, width, height):
-    return [
-        Particle(
-            x=random.uniform(0, width),
-            y=random.uniform(0, height),
-            vx=random.uniform(-100, 100),
-            vy=random.uniform(-100, 100),
-            radius=random.uniform(2, 5),
-            mass=math.pi * (random.uniform(2, 14) ** 2)
+class ParticleSystem:
+    def __init__(self, width: int, height: int):
+        self.width = width
+        self.height = height
+        self.particles: List[Particle] = []
+        self.profiler = Profiler()
+        
+    def create_particles(self, n: int):
+        self.particles = [
+            Particle(
+                x=random.uniform(0, self.width),
+                y=random.uniform(0, self.height),
+                vx=random.uniform(-100, 100),
+                vy=random.uniform(-100, 100),
+                radius=random.uniform(2, 5),
+                mass=math.pi * (random.uniform(2, 14) ** 2)
+            )
+            for _ in range(n)
+        ]
+        return self.particles
+        
+    def update(self, dt: float):
+        self.profiler.start_frame()
+        
+        # Update positions
+        self.particles = [self._update_position(p, dt) for p in self.particles]
+        
+        # Handle wall collisions
+        self.particles = [self._handle_wall_collision(p) for p in self.particles]
+        
+        # Handle particle collisions
+        self.particles = self._sweep_and_prune()
+        
+        self.profiler.end_frame()
+        return self.particles
+        
+    def _update_position(self, p: Particle, dt: float) -> Particle:
+        return Particle(
+            x=p.x + p.vx * dt,
+            y=p.y + p.vy * dt,
+            vx=p.vx,
+            vy=p.vy,
+            radius=p.radius,
+            mass=p.mass
         )
-        for _ in range(n)
-    ]
+        
+    def _handle_wall_collision(self, p: Particle) -> Particle:
+        vx, vy, x, y = p.vx, p.vy, p.x, p.y
+
+        if x - p.radius < 0 or x + p.radius > self.width:
+            vx *= -1
+            x = max(p.radius, min(x, self.width - p.radius))
+        
+        if y - p.radius < 0 or y + p.radius > self.height:
+            vy *= -1
+            y = max(p.radius, min(y, self.height - p.radius))
+        
+        return Particle(
+            x=x,
+            y=y,
+            vx=vx,
+            vy=vy,
+            radius=p.radius,
+            mass=p.mass
+        )
+        
+    def _handle_particle_collision(self, p1: Particle, p2: Particle) -> Tuple[Particle, Particle]:
+        dx = p2.x - p1.x
+        dy = p2.y - p1.y
+        dist = math.hypot(dx, dy)
+
+        min_dist = p1.radius + p2.radius
+        if dist >= min_dist or dist == 0:
+            return p1, p2
+            
+        # Collision detected
+        self.profiler.record_collision()
+        
+        nx = dx / dist
+        ny = dy / dist
+        tx = -ny
+        ty = nx
+
+        dpTan1 = p1.vx * tx + p1.vy * ty
+        dpTan2 = p2.vx * tx + p2.vy * ty
+        dpNorm1 = p1.vx * nx + p1.vy * ny
+        dpNorm2 = p2.vx * nx + p2.vy * ny
+
+        m1, m2 = p1.mass, p2.mass
+
+        v1n = (dpNorm1 * (m1 - m2) + 2 * m2 * dpNorm2) / (m1 + m2)
+        v2n = (dpNorm2 * (m2 - m1) + 2 * m1 * dpNorm1) / (m1 + m2)
+
+        vx1 = tx * dpTan1 + nx * v1n
+        vy1 = ty * dpTan1 + ny * v1n
+        vx2 = tx * dpTan2 + nx * v2n
+        vy2 = ty * dpTan2 + ny * v2n
+
+        # Resolve position overlap
+        overlap = min_dist - dist
+        connection = overlap / (m1 + m2)
+        x1 = p1.x - nx * connection * m2
+        y1 = p1.y - ny * connection * m2
+        x2 = p2.x + nx * connection * m1
+        y2 = p2.y + ny * connection * m1
+
+        return (
+            Particle(x1, y1, vx1, vy1, p1.radius, p1.mass),
+            Particle(x2, y2, vx2, vy2, p2.radius, p2.mass)
+        )
+        
+    def _sweep_and_prune(self) -> List[Particle]:
+        particles = self.particles
+        n = len(particles)
+        if n < 2:
+            return particles[:]
+
+        indexed_particles = list(enumerate(particles))
+        endpoints = [(p.x - p.radius, True, i) for i, p in indexed_particles] + \
+                    [(p.x + p.radius, False, i) for i, p in indexed_particles]
+        endpoints.sort()
+
+        active = set()
+        updated = particles[:]
+
+        for _, is_start, idx in endpoints:
+            if is_start:
+                for j in active:
+                    updated[idx], updated[j] = self._handle_particle_collision(updated[idx], updated[j])
+                active.add(idx)
+            else:
+                active.remove(idx)
+
+        return updated
+        
+    def get_profiler_stats(self):
+        return self.profiler.get_stats()
+
+
+class ParticleRenderer:
+    def __init__(self, screen: pygame.Surface):
+        self.screen = screen
+        self.default_color = (255, 255, 255)
+        self.background_color = (0, 0, 0)
+        self.font = None
+        self._init_font()
+        
+    def _init_font(self):
+        try:
+            self.font = pygame.font.SysFont('Arial', 14)
+        except:
+            pass  # Font not available
+        
+    def render(self, particles: List[Particle], stats: Optional[dict] = None):
+        self.screen.fill(self.background_color)
+        
+        # Draw all particles
+        for p in particles:
+            pygame.draw.circle(
+                self.screen, 
+                self.default_color, 
+                (int(p.x), int(p.y)), 
+                int(p.radius)
+            )
+            
+        # Display stats if available
+        if stats and self.font:
+            fps = 1.0 / stats["avg_frame_time"] if stats["avg_frame_time"] > 0 else 0
+            stats_text = f"FPS: {fps:.1f} | Collisions/frame: {stats['avg_collisions']:.1f}"
+            text_surface = self.font.render(stats_text, True, (255, 255, 0))
+            self.screen.blit(text_surface, (10, 10))
+            
+        pygame.display.flip()
+
 
 def run_pygame_simulation():
+    """
+    Main entry point for the simulation.
+    Sets up the simulation components and runs the main loop.
+    """
+    # Initialize pygame
     pygame.init()
-    width, height = 1200, 800
+    width, height = 1400, 1000
     screen = pygame.display.set_mode((width, height))
     pygame.display.set_caption("Particle Simulation")
     clock = pygame.time.Clock()
-
-    particles = create_particles(1000, width, height)
+    
+    # Create the modular components
+    particle_system = ParticleSystem(width, height)
+    particle_system.create_particles(10000)
+    renderer = ParticleRenderer(screen)
+    
+    # Main loop variables
     running = True
-
+    show_stats = True
+    stats_update_timer = 0
+    
     while running:
+        # Handle timing
         dt = clock.tick(60) / 1000.0  # Time in seconds since last frame
+        stats_update_timer += dt
+        
+        # Handle input
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_s:  # Toggle stats display
+                    show_stats = not show_stats
+                elif event.key == pygame.K_r:  # Reset simulation
+                    particle_system.create_particles(1000)
         
-        particles = simulate_steps(particles, dt, width, height)
-
-        screen.fill((0, 0, 0))
-        for p in particles:
-            pygame.draw.circle(screen, (255, 255, 255), (int(p.x), int(p.y)), int(p.radius))
-        pygame.display.flip()
+        # Update simulation
+        particle_system.update(dt)
+        
+        # Render
+        if show_stats:
+            stats = particle_system.get_profiler_stats()
+            renderer.render(particle_system.particles, stats)
+            
+            # Print stats every second
+            if stats_update_timer >= 1.0:
+                particle_system.profiler.print_stats()
+                stats_update_timer = 0
+        else:
+            renderer.render(particle_system.particles)
     
     pygame.quit()
+
 
 if __name__ == "__main__":
     run_pygame_simulation()
