@@ -674,6 +674,8 @@ def run_pygame_simulation():
     paused = False  # Add a paused state
     show_stats = True
     draw_boundaries = False
+    attract_to_mouse = False  # Add a toggle for mouse attraction
+    mouse_pressed = False  # Track mouse button state
     stats_update_timer = 0
 
     while running:
@@ -694,8 +696,55 @@ def run_pygame_simulation():
                     draw_boundaries = not draw_boundaries
                 elif event.key == pygame.K_r:  # Reset simulation
                     particle_system.create_particles(PARTICLE_COUNT)
+                elif event.key == pygame.K_a:  # Toggle attraction to mouse
+                    attract_to_mouse = not attract_to_mouse
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                mouse_pressed = True  # Set mouse_pressed to True when the button is pressed
+            elif event.type == pygame.MOUSEBUTTONUP:
+                mouse_pressed = False  # Set mouse_pressed to False when the button is released
 
         if not paused:  # Only update simulation if not paused
+            if attract_to_mouse and mouse_pressed:  # Check if attraction is enabled and mouse is pressed
+                mouse_x, mouse_y = pygame.mouse.get_pos()
+
+                # Track the previous mouse position to calculate cursor velocity
+                if 'prev_mouse_x' not in locals():
+                    prev_mouse_x, prev_mouse_y = mouse_x, mouse_y
+
+                cursor_vx = (mouse_x - prev_mouse_x) / dt
+                cursor_vy = (mouse_y - prev_mouse_y) / dt
+
+                interaction_radius = 100  # Define the radius of influence around the cursor
+
+                for i, particle in enumerate(particle_system.particles):
+                    dx = mouse_x - particle.x
+                    dy = mouse_y - particle.y
+                    distance_squared = dx * dx + dy * dy  # Avoid expensive sqrt calculation
+                    if distance_squared > 0 and distance_squared <= interaction_radius ** 2:
+                        distance = math.sqrt(distance_squared)
+
+                        # Normalize the direction and apply an immediate strong acceleration
+                        force = 2000  # Very high force for immediate acceleration
+                        fx = force * (dx / distance)
+                        fy = force * (dy / distance)
+
+                        # Add a fraction of the cursor's velocity to the particles' velocity
+                        new_vx = fx * dt + cursor_vx * 0.2  # Add 20% of cursor velocity
+                        new_vy = fy * dt + cursor_vy * 0.2
+
+                        # Create a new Particle instance with updated velocity
+                        particle_system.particles[i] = Particle(
+                            x=particle.x,
+                            y=particle.y,
+                            vx=new_vx,
+                            vy=new_vy,
+                            radius=particle.radius,
+                            mass=particle.mass,
+                            color=particle.color
+                        )
+
+                # Update previous mouse position
+                prev_mouse_x, prev_mouse_y = mouse_x, mouse_y
             particle_system.update(dt)
 
         if show_stats:
