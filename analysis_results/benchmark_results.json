@@ -1,0 +1,122 @@
+[
+    {
+        "particles": 1000,
+        "threads": 1,
+        "total_frames": 395,
+        "avg_frame_time_ms": 25.500309467315674,
+        "avg_collisions_per_frame": 35.89,
+        "total_duration_s": 10.015913724899292
+    },
+    {
+        "particles": 1000,
+        "threads": 4,
+        "total_frames": 361,
+        "avg_frame_time_ms": 26.940937042236328,
+        "avg_collisions_per_frame": 37.59,
+        "total_duration_s": 10.003750562667847
+    },
+    {
+        "particles": 1000,
+        "threads": 8,
+        "total_frames": 347,
+        "avg_frame_time_ms": 29.866976737976074,
+        "avg_collisions_per_frame": 38.71,
+        "total_duration_s": 10.008928537368774
+    },
+    {
+        "particles": 2500,
+        "threads": 1,
+        "total_frames": 118,
+        "avg_frame_time_ms": 84.26759719848633,
+        "avg_collisions_per_frame": 463.96,
+        "total_duration_s": 10.02985692024231
+    },
+    {
+        "particles": 2500,
+        "threads": 4,
+        "total_frames": 102,
+        "avg_frame_time_ms": 97.94328927993774,
+        "avg_collisions_per_frame": 556.81,
+        "total_duration_s": 10.04565143585205
+    },
+    {
+        "particles": 2500,
+        "threads": 8,
+        "total_frames": 99,
+        "avg_frame_time_ms": 100.56833064917362,
+        "avg_collisions_per_frame": 586.2929292929293,
+        "total_duration_s": 10.017221927642822
+    },
+    {
+        "particles": 5000,
+        "threads": 1,
+        "total_frames": 33,
+        "avg_frame_time_ms": 307.415145816225,
+        "avg_collisions_per_frame": 10635.454545454546,
+        "total_duration_s": 10.174830436706543
+    },
+    {
+        "particles": 5000,
+        "threads": 4,
+        "total_frames": 27,
+        "avg_frame_time_ms": 377.00376687226475,
+        "avg_collisions_per_frame": 10447.25925925926,
+        "total_duration_s": 10.191872835159302
+    },
+    {
+        "particles": 5000,
+        "threads": 8,
+        "total_frames": 27,
+        "avg_frame_time_ms": 373.02458727801286,
+        "avg_collisions_per_frame": 10723.25925925926,
+        "total_duration_s": 10.092633724212646
+    },
+    {
+        "particles": 7500,
+        "threads": 1,
+        "total_frames": 20,
+        "avg_frame_time_ms": 513.3852481842041,
+        "avg_collisions_per_frame": 19150.25,
+        "total_duration_s": 10.287162065505981
+    },
+    {
+        "particles": 7500,
+        "threads": 4,
+        "total_frames": 16,
+        "avg_frame_time_ms": 662.4778509140015,
+        "avg_collisions_per_frame": 19542.75,
+        "total_duration_s": 10.612073183059692
+    },
+    {
+        "particles": 7500,
+        "threads": 8,
+        "total_frames": 15,
+        "avg_frame_time_ms": 711.691951751709,
+        "avg_collisions_per_frame": 19785.2,
+        "total_duration_s": 10.703112363815308
+    },
+    {
+        "particles": 10000,
+        "threads": 1,
+        "total_frames": 12,
+        "avg_frame_time_ms": 839.8361802101135,
+        "avg_collisions_per_frame": 30465.666666666668,
+        "total_duration_s": 10.10696268081665
+    },
+    {
+        "particles": 10000,
+        "threads": 4,
+        "total_frames": 9,
+        "avg_frame_time_ms": 1279.387844933404,
+        "avg_collisions_per_frame": 30566.666666666668,
+        "total_duration_s": 11.535779476165771
+    },
+    {
+        "particles": 10000,
+        "threads": 8,
+        "total_frames": 7,
+        "avg_frame_time_ms": 1428.5672732761927,
+        "avg_collisions_per_frame": 31789.14285714286,
+        "total_duration_s": 10.016183853149414
+    }
+]
