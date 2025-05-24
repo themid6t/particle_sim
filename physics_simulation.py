@@ -9,6 +9,35 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 import copy 
 
+
+# Particle parameters
+VELOCITY_RANGE = (-100, 200)  # Range for particle velocity
+RADIUS_RANGE = (2, 8)         # Range for particle radius
+MASS_RADIUS_RANGE = (2, 8)   # Range for radius used in mass calculation
+
+# Simulation parameters
+SCREEN_WIDTH = 1440          # Screen width
+SCREEN_HEIGHT = 800          # Screen height
+FRAME_RATE = 60               # Frames per second
+
+PARTICLE_COUNT = 1000  # Default number of particles in the simulation
+
+if PARTICLE_COUNT > 2000:
+    print(f"Warning: High particle count ({PARTICLE_COUNT}) may affect performance.")
+    VELOCITY_RANGE = (-100, 100)  # Adjust velocity range for larger particle counts
+    MASS_RADIUS_RANGE = RADIUS_RANGE = (2, 6)  # Adjust radius range for larger particle counts
+
+# Additional global constants
+NUM_THREADS = 8  # Number of threads for multithreaded simulation
+
+# BACKGROUND_COLOR = (0, 0, 0)  # Screen background color
+BACKGROUND_COLOR = (255, 255, 255)  # Screen background color
+FONT_COLOR = (255, 255, 0)
+
+if BACKGROUND_COLOR == (255, 255, 255):
+    FONT_COLOR = (0, 0, 0)
+
+
 @dataclass(frozen=True)
 class Particle:
     x: float
@@ -16,7 +45,30 @@ class Particle:
     vx: float
     vy: float
     radius: float
-    mass: float
+    mass: float = 0  # Default value, will be calculated
+    color: Tuple[int, int, int] = (255, 255, 255)  # Default value, will be calculated
+
+    def __post_init__(self):
+        object.__setattr__(self, 'mass', math.pi * min(self.radius, MASS_RADIUS_RANGE[1]) ** 2)  # Mass depends on radius
+        max_mass = math.pi * MASS_RADIUS_RANGE[1] ** 2  # Max radius is 8
+        mass_ratio = self.mass / max_mass # normalize mass to [0, 1]
+
+        if mass_ratio <= 0.5:
+            # Blue to Green
+            t = mass_ratio / 0.5
+            r = int(255 * (1 - t))
+            g = int(255 * t)
+            b = int(255 * (1 - t))
+        else:
+            # Green to Red
+            t = (mass_ratio - 0.5) / 0.5
+            r = int(255 * t)
+            g = int(255 * (1 - t))
+            b = 0
+
+        color = (b, g, r)
+        object.__setattr__(self, 'color', color)
+
 
 class Profiler:
     def __init__(self):
@@ -71,10 +123,9 @@ class ParticleSystem:
             Particle(
                 x=random.uniform(0, self.width),
                 y=random.uniform(0, self.height),
-                vx=random.uniform(-100, 100),
-                vy=random.uniform(-100, 100),
-                radius=random.uniform(2, 2),
-                mass=math.pi * (random.uniform(2, 14) ** 2)
+                vx=random.uniform(*VELOCITY_RANGE),
+                vy=random.uniform(*VELOCITY_RANGE),
+                radius=random.uniform(*RADIUS_RANGE)
             )
             for _ in range(n)
         ]
@@ -166,8 +217,8 @@ class ParticleSystem:
         y2 = p2.y + ny * connection * m1
 
         return (
-            Particle(x1, y1, vx1, vy1, p1.radius, p1.mass),
-            Particle(x2, y2, vx2, vy2, p2.radius, p2.mass)
+            Particle(x1, y1, vx1, vy1, p1.radius),
+            Particle(x2, y2, vx2, vy2, p2.radius)
         )
         
     def _sweep_and_prune(self) -> List[Particle]:
@@ -399,16 +450,15 @@ class MultithreadedParticleSystem(ParticleSystem):
         y2 = p2.y + ny * connection * m1
 
         return (
-            Particle(x1, y1, vx1, vy1, p1.radius, p1.mass),
-            Particle(x2, y2, vx2, vy2, p2.radius, p2.mass)
+            Particle(x1, y1, vx1, vy1, p1.radius),
+            Particle(x2, y2, vx2, vy2, p2.radius)
         )
 
 
 class ParticleRenderer:
     def __init__(self, screen: pygame.Surface):
         self.screen = screen
-        self.default_color = (255, 255, 255)
-        self.background_color = (0, 0, 0)
+        self.background_color = BACKGROUND_COLOR
         self.font = None
         self._init_font()
         
@@ -425,7 +475,7 @@ class ParticleRenderer:
         for p in particles:
             pygame.draw.circle(
                 self.screen, 
-                self.default_color, 
+                p.color, 
                 (int(p.x), int(p.y)), 
                 int(p.radius)
             )
@@ -433,9 +483,14 @@ class ParticleRenderer:
         # Display stats if available
         if stats and self.font:
             fps = 1.0 / stats["avg_frame_time"] if stats["avg_frame_time"] > 0 else 0
-            stats_text = f"FPS: {fps:.1f} | Collisions/frame: {stats['avg_collisions']:.1f}"
-            text_surface = self.font.render(stats_text, True, (255, 255, 0))
+            stats_text = f"FPS: {fps:.1f} | Collisions/frame: {stats['avg_collisions']:.1f} | Particles: {len(particles)} | Threads: {NUM_THREADS}"
+            avg_stats_text = f"Avg frame time: {stats['avg_frame_time']*1000:.2f} ms, Avg collisions/frame: {stats['avg_collisions']:.2f}" 
+            
+            text_surface = self.font.render(stats_text, True, FONT_COLOR)
+            avg_stats_surface = self.font.render(avg_stats_text, True, FONT_COLOR)
+            
             self.screen.blit(text_surface, (10, 10))
+            self.screen.blit(avg_stats_surface, (10, 30))
             
         pygame.display.flip()
 
@@ -447,62 +502,56 @@ def run_pygame_simulation():
     """
     # Initialize pygame
     pygame.init()
-    width, height = 1400, 1000
-    screen = pygame.display.set_mode((width, height))
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("Particle Simulation")
     clock = pygame.time.Clock()
+
     # Create the modular components
-    # Choose between single-threaded or multi-threaded system
     use_threading = True  # Set to False to use single-threaded version
-    
+
     if use_threading:
-        # Use all available CPU cores minus 1 (to leave one for UI)
-        import os
-        num_threads = 8 #max(1, os.cpu_count() - 1) if os.cpu_count() else 4
-        particle_system = MultithreadedParticleSystem(width, height, num_threads=num_threads)
+        num_threads = NUM_THREADS
+        particle_system = MultithreadedParticleSystem(SCREEN_WIDTH, SCREEN_HEIGHT, num_threads=num_threads)
         print(f"Using multithreaded system with {num_threads} threads")
     else:
-        particle_system = ParticleSystem(width, height)
+        particle_system = ParticleSystem(SCREEN_WIDTH, SCREEN_HEIGHT)
         print("Using single-threaded system")
-        
-    particle_system.create_particles(10000)
+
+    particle_system.create_particles(PARTICLE_COUNT)
     renderer = ParticleRenderer(screen)
-    
+
     # Main loop variables
     running = True
     show_stats = True
     stats_update_timer = 0
-    
+
     while running:
-        # Handle timing
-        dt = clock.tick(60) / 1000.0  # Time in seconds since last frame
+        dt = clock.tick(FRAME_RATE) / 1000.0  # Time in seconds since last frame
         stats_update_timer += dt
-        
-        # Handle input
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_s:  # Toggle stats display
+                if event.key == pygame.K_ESCAPE:  # Exit on ESC
+                    running = False 
+                elif event.key == pygame.K_s:  # Toggle stats display
                     show_stats = not show_stats
                 elif event.key == pygame.K_r:  # Reset simulation
-                    particle_system.create_particles(1000)
-        
-        # Update simulation
+                    particle_system.create_particles(PARTICLE_COUNT)
+
         particle_system.update(dt)
-        
-        # Render
+
         if show_stats:
             stats = particle_system.get_profiler_stats()
             renderer.render(particle_system.particles, stats)
-            
-            # Print stats every second
+
             if stats_update_timer >= 1.0:
                 particle_system.profiler.print_stats()
                 stats_update_timer = 0
         else:
             renderer.render(particle_system.particles)
-    
+
     pygame.quit()
 
 
