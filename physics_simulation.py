@@ -3,6 +3,7 @@ import random
 import math
 import time
 from dataclasses import dataclass
+import argparse
 
 from typing import List, Tuple, Optional
 import threading
@@ -40,6 +41,18 @@ if BACKGROUND_COLOR == (255, 255, 255):
 
 @dataclass(frozen=True)
 class Particle:
+    """
+    Represents a particle in the simulation.
+
+    Attributes:
+        x (float): X-coordinate of the particle.
+        y (float): Y-coordinate of the particle.
+        vx (float): Velocity of the particle along the X-axis.
+        vy (float): Velocity of the particle along the Y-axis.
+        radius (float): Radius of the particle.
+        mass (float): Mass of the particle, calculated based on its radius.
+        color (Tuple[int, int, int]): Color of the particle, determined by its mass.
+    """
     x: float
     y: float
     vx: float
@@ -66,11 +79,14 @@ class Particle:
             g = int(255 * (1 - t))
             b = 0
 
-        color = (b, g, r)
+        color = (r, g, b)
         object.__setattr__(self, 'color', color)
 
 
 class Profiler:
+    """
+    Tracks performance metrics for the simulation, such as frame times and collision counts.
+    """
     def __init__(self):
         self.frame_times = []
         self.collision_counts = []
@@ -78,19 +94,34 @@ class Profiler:
         self._collision_count = 0
         
     def start_frame(self):
+        """
+        Starts timing for a new frame.
+        """
         self._start_time = time.time()
         self._collision_count = 0
         
     def end_frame(self):
+        """
+        Ends timing for the current frame and records statistics.
+        """
         if self._start_time is not None:
             frame_time = time.time() - self._start_time
             self.frame_times.append(frame_time)
             self.collision_counts.append(self._collision_count)
             
     def record_collision(self):
+        """
+        Records a collision event for the current frame.
+        """
         self._collision_count += 1
         
     def get_stats(self) -> dict:
+        """
+        Returns performance statistics, including average frame time and collisions per frame.
+
+        Returns:
+            dict: A dictionary containing average frame time, average collisions, and total frames.
+        """
         if not self.frame_times:
             return {"avg_frame_time": 0, "avg_collisions": 0}
             
@@ -112,6 +143,9 @@ class Profiler:
 
 
 class ParticleSystem:
+    """
+    Manages the simulation of particles, including their creation, updates, and collision handling.
+    """
     def __init__(self, width: int, height: int):
         self.width = width
         self.height = height
@@ -119,6 +153,15 @@ class ParticleSystem:
         self.profiler = Profiler()
         
     def create_particles(self, n: int):
+        """
+        Creates a specified number of particles with random properties.
+
+        Args:
+            n (int): Number of particles to create.
+
+        Returns:
+            List[Particle]: A list of created particles.
+        """
         self.particles = [
             Particle(
                 x=random.uniform(0, self.width),
@@ -132,6 +175,15 @@ class ParticleSystem:
         return self.particles
         
     def update(self, dt: float):
+        """
+        Updates the state of all particles in the system.
+
+        Args:
+            dt (float): Time step for the update.
+
+        Returns:
+            List[Particle]: The updated list of particles.
+        """
         self.profiler.start_frame()
         
         # Update positions
@@ -177,6 +229,16 @@ class ParticleSystem:
         )
         
     def _handle_particle_collision(self, p1: Particle, p2: Particle) -> Tuple[Particle, Particle]:
+        """
+        Resolves a collision between two particles.
+
+        Args:
+            p1 (Particle): The first particle.
+            p2 (Particle): The second particle.
+
+        Returns:
+            Tuple[Particle, Particle]: The updated states of the two particles after collision.
+        """
         dx = p2.x - p1.x
         dy = p2.y - p1.y
         dist = math.hypot(dx, dy)
@@ -250,16 +312,32 @@ class ParticleSystem:
 
 class MultithreadedParticleSystem(ParticleSystem):
     """
-    A particle system that uses multiple threads for simulation.
+    Extends ParticleSystem to use multiple threads for simulation.
     Partitions particles by x-coordinate and processes each partition in a separate thread.
     """
     def __init__(self, width: int, height: int, num_threads: int = 8):
+        """
+        Initializes the multithreaded particle system.
+
+        Args:
+            width (int): Width of the simulation area.
+            height (int): Height of the simulation area.
+            num_threads (int): Number of threads to use for simulation.
+        """
         super().__init__(width, height)
         self.num_threads = num_threads
         self.lock = threading.Lock()  # For thread-safe profiler access
         
     def update(self, dt: float):
-        """Update all particles using multiple threads"""
+        """
+        Updates all particles using multiple threads.
+
+        Args:
+            dt (float): Time step for the update.
+
+        Returns:
+            List[Particle]: The updated list of particles.
+        """
         self.profiler.start_frame()
 
         # Partition particles by X-axis with overlap handling
@@ -282,11 +360,15 @@ class MultithreadedParticleSystem(ParticleSystem):
     def _partition_particles_with_boundaries(self, particles: List[Particle], num_parts: int) -> Tuple[List[List[Particle]], dict]:
         """
         Partitions particles by X-axis and identifies particles at partition boundaries.
-        
+
+        Args:
+            particles (List[Particle]): List of particles to partition.
+            num_parts (int): Number of partitions.
+
         Returns:
-            Tuple containing:
-            - List of particle partitions
-            - Dictionary mapping original indices to partition indices for boundary particles
+            Tuple[List[List[Particle]], dict]:
+                - List of particle partitions.
+                - Dictionary mapping original indices to partition indices for boundary particles.
         """
         partitions = [[] for _ in range(num_parts)]
         boundary_map = {}  # Maps (partition_idx, local_idx) to list of (neighbor_partition, particle) tuples
@@ -322,10 +404,10 @@ class MultithreadedParticleSystem(ParticleSystem):
     def _handle_boundary_collisions(self, updated_partitions: List[List[Particle]], boundary_map: dict):
         """
         Handles collisions between particles at partition boundaries.
-        
+
         Args:
-            updated_partitions: List of updated particle lists from each thread
-            boundary_map: Dictionary mapping particle positions to boundary information
+            updated_partitions (List[List[Particle]]): List of updated particle lists from each thread.
+            boundary_map (dict): Dictionary mapping particle positions to boundary information.
         """
         # Process all boundary particles
         for (part_idx, local_idx), neighbors in boundary_map.items():
@@ -384,6 +466,12 @@ class MultithreadedParticleSystem(ParticleSystem):
     def _thread_sweep_and_prune(self, particles: List[Particle]) -> List[Particle]:
         """
         Implements sweep and prune algorithm for efficient collision detection within a thread.
+
+        Args:
+            particles (List[Particle]): List of particles to process.
+
+        Returns:
+            List[Particle]: The updated list of particles after handling collisions.
         """
         n = len(particles)
         if n < 2:
@@ -456,6 +544,9 @@ class MultithreadedParticleSystem(ParticleSystem):
 
 
 class ParticleRenderer:
+    """
+    Handles rendering of particles and simulation statistics using Pygame.
+    """
     def __init__(self, screen: pygame.Surface):
         self.screen = screen
         self.background_color = BACKGROUND_COLOR
@@ -469,6 +560,13 @@ class ParticleRenderer:
             pass  # Font not available
         
     def render(self, particles: List[Particle], stats: Optional[dict] = None):
+        """
+        Renders particles and displays statistics on the screen.
+
+        Args:
+            particles (List[Particle]): List of particles to render.
+            stats (Optional[dict]): Simulation statistics to display.
+        """
         self.screen.fill(self.background_color)
         
         # Draw all particles
@@ -495,11 +593,35 @@ class ParticleRenderer:
         pygame.display.flip()
 
 
+def parse_arguments():
+    """
+    Parses command-line arguments for configuring the simulation.
+
+    Returns:
+        argparse.Namespace: Parsed arguments including number of threads and particles.
+    """
+    parser = argparse.ArgumentParser(description="Particle Simulation")
+    parser.add_argument(
+        "-t", "--threads", type=int, default=NUM_THREADS,
+        help="Number of threads to use for the simulation (default: 8)"
+    )
+    parser.add_argument(
+        "-p", "--particles", type=int, default=PARTICLE_COUNT,
+        help="Number of particles in the simulation (default: 1000)"
+    )
+    return parser.parse_args()
+
 def run_pygame_simulation():
     """
     Main entry point for the simulation.
     Sets up the simulation components and runs the main loop.
     """
+    args = parse_arguments()  # Parse command-line arguments
+
+    global NUM_THREADS, PARTICLE_COUNT
+    NUM_THREADS = args.threads
+    PARTICLE_COUNT = args.particles
+
     # Initialize pygame
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -510,12 +632,11 @@ def run_pygame_simulation():
     use_threading = True  # Set to False to use single-threaded version
 
     if use_threading:
-        num_threads = NUM_THREADS
-        particle_system = MultithreadedParticleSystem(SCREEN_WIDTH, SCREEN_HEIGHT, num_threads=num_threads)
-        print(f"Using multithreaded system with {num_threads} threads")
+        particle_system = MultithreadedParticleSystem(SCREEN_WIDTH, SCREEN_HEIGHT, num_threads=NUM_THREADS)
+        print(f"Using multithreaded system with {NUM_THREADS} threads for {PARTICLE_COUNT} particles")
     else:
         particle_system = ParticleSystem(SCREEN_WIDTH, SCREEN_HEIGHT)
-        print("Using single-threaded system")
+        print("Using single-threaded system for {PARTICLE_COUNT} particles")
 
     particle_system.create_particles(PARTICLE_COUNT)
     renderer = ParticleRenderer(screen)
