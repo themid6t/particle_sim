@@ -678,6 +678,9 @@ def run_pygame_simulation():
     mouse_pressed = False  # Track mouse button state
     stats_update_timer = 0
 
+    # Initialize variables to track the previous mouse position
+    prev_mouse_x, prev_mouse_y = None, None
+
     while running:
         dt = clock.tick(FRAME_RATE) / 1000.0  # Time in seconds since last frame
         stats_update_timer += dt
@@ -707,14 +710,14 @@ def run_pygame_simulation():
             if attract_to_mouse and mouse_pressed:  # Check if attraction is enabled and mouse is pressed
                 mouse_x, mouse_y = pygame.mouse.get_pos()
 
-                # Track the previous mouse position to calculate cursor velocity
-                if 'prev_mouse_x' not in locals():
+                # Start tracking the previous mouse position when the button is pressed
+                if prev_mouse_x is None or prev_mouse_y is None:
                     prev_mouse_x, prev_mouse_y = mouse_x, mouse_y
 
                 cursor_vx = (mouse_x - prev_mouse_x) / dt
                 cursor_vy = (mouse_y - prev_mouse_y) / dt
 
-                interaction_radius = 100  # Define the radius of influence around the cursor
+                interaction_radius = 80  # Define the radius of influence around the cursor
 
                 for i, particle in enumerate(particle_system.particles):
                     dx = mouse_x - particle.x
@@ -729,8 +732,8 @@ def run_pygame_simulation():
                         fy = force * (dy / distance)
 
                         # Add a fraction of the cursor's velocity to the particles' velocity
-                        new_vx = fx * dt + cursor_vx * 0.2  # Add 20% of cursor velocity
-                        new_vy = fy * dt + cursor_vy * 0.2
+                        new_vx = fx * dt + cursor_vx * 0.3  # Add 20% of cursor velocity
+                        new_vy = fy * dt + cursor_vy * 0.3
 
                         # Create a new Particle instance with updated velocity
                         particle_system.particles[i] = Particle(
@@ -745,6 +748,9 @@ def run_pygame_simulation():
 
                 # Update previous mouse position
                 prev_mouse_x, prev_mouse_y = mouse_x, mouse_y
+            else:
+                # Reset previous mouse position when the button is released
+                prev_mouse_x, prev_mouse_y = None, None
             particle_system.update(dt)
 
         if show_stats:
