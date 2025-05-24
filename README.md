@@ -8,7 +8,7 @@ This project is a particle simulation system implemented in Python. It simulates
 1. **Install Python**: Ensure you have Python 3.8 or later installed.
 2. **Install Dependencies**:
    ```bash
-   pip install pygame
+   pip install -r requirements.txt
    ```
 3. **Run the Simulation**:
    ```bash
