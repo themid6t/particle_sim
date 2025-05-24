@@ -12,8 +12,8 @@ import copy
 
 
 # Particle parameters
-VELOCITY_RANGE = (-100, 200)  # Range for particle velocity
-RADIUS_RANGE = (2, 8)         # Range for particle radius
+VELOCITY_RANGE = (-100, 100)  # Range for particle velocity
+RADIUS_RANGE = (2, 14)         # Range for particle radius
 MASS_RADIUS_RANGE = (2, 8)   # Range for radius used in mass calculation
 
 # Simulation parameters
@@ -23,6 +23,7 @@ FRAME_RATE = 60               # Frames per second
 
 PARTICLE_COUNT = 1000  # Default number of particles in the simulation
 
+# Adjust parameters based on updated PARTICLE_COUNT
 if PARTICLE_COUNT > 2000:
     print(f"Warning: High particle count ({PARTICLE_COUNT}) may affect performance.")
     VELOCITY_RANGE = (-100, 100)  # Adjust velocity range for larger particle counts
@@ -271,7 +272,7 @@ class ParticleSystem:
         vy2 = ty * dpTan2 + ny * v2n
 
         # Resolve position overlap
-        overlap = min_dist - dist
+        overlap = max(0, min_dist - dist)  # Ensure overlap is non-negative
         connection = overlap / (m1 + m2)
         x1 = p1.x - nx * connection * m2
         y1 = p1.y - ny * connection * m2
@@ -403,39 +404,42 @@ class MultithreadedParticleSystem(ParticleSystem):
                 
     def _handle_boundary_collisions(self, updated_partitions: List[List[Particle]], boundary_map: dict):
         """
-        Handles collisions between particles at partition boundaries.
+        Handles collisions between particles at partition boundaries using locks for thread safety.
 
         Args:
             updated_partitions (List[List[Particle]]): List of updated particle lists from each thread.
             boundary_map (dict): Dictionary mapping particle positions to boundary information.
         """
+        locks = [threading.Lock() for _ in range(len(updated_partitions))]  # One lock per partition
+
         # Process all boundary particles
         for (part_idx, local_idx), neighbors in boundary_map.items():
             if part_idx >= len(updated_partitions) or local_idx >= len(updated_partitions[part_idx]):
                 continue  # Skip if indices are no longer valid (particle might have moved)
-                
+
             # Get the updated particle from its primary partition
             p1 = updated_partitions[part_idx][local_idx]
-            
+
             # Check for collisions with particles in neighboring partitions
             for neighbor_part_idx, _ in neighbors:
                 if neighbor_part_idx >= len(updated_partitions):
                     continue
-                    
-                # Perform sweep and prune for this particle against the neighbor partition
-                for j, p2 in enumerate(updated_partitions[neighbor_part_idx]):
-                    # Check if particles could collide (simple distance check)
-                    dx = p2.x - p1.x
-                    dy = p2.y - p1.y
-                    dist = math.hypot(dx, dy)
-                    min_dist = p1.radius + p2.radius
-                    
-                    if dist < min_dist:  # Collision detected
-                        # Update both particles
-                        updated_p1, updated_p2 = self._handle_particle_collision(p1, p2)
-                        updated_partitions[part_idx][local_idx] = updated_p1
-                        updated_partitions[neighbor_part_idx][j] = updated_p2
-                        p1 = updated_p1  # Update p1 for subsequent checks
+
+                # Lock both partitions to ensure thread-safe access
+                with locks[part_idx], locks[neighbor_part_idx]:
+                    for j, p2 in enumerate(updated_partitions[neighbor_part_idx]):
+                        # Check if particles could collide (simple distance check)
+                        dx = p2.x - p1.x
+                        dy = p2.y - p1.y
+                        dist = math.hypot(dx, dy)
+                        min_dist = p1.radius + p2.radius
+
+                        if dist < min_dist:  # Collision detected
+                            # Update both particles
+                            updated_p1, updated_p2 = self._handle_particle_collision(p1, p2)
+                            updated_partitions[part_idx][local_idx] = updated_p1
+                            updated_partitions[neighbor_part_idx][j] = updated_p2
+                            p1 = updated_p1  # Update p1 for subsequent checks
 
     def _partition_particles(self, particles: List[Particle], num_parts: int) -> List[List[Particle]]:
         """Original partitioning method (for backward compatibility)"""
@@ -530,7 +534,7 @@ class MultithreadedParticleSystem(ParticleSystem):
         vx2 = tx * dpTan2 + nx * v2n
         vy2 = ty * dpTan2 + ny * v2n
 
-        overlap = min_dist - dist
+        overlap = max(0, min_dist - dist)  # Ensure overlap is non-negative
         connection = overlap / (m1 + m2)
         x1 = p1.x - nx * connection * m2
         y1 = p1.y - ny * connection * m2
@@ -552,23 +556,38 @@ class ParticleRenderer:
         self.background_color = BACKGROUND_COLOR
         self.font = None
         self._init_font()
-        
+
     def _init_font(self):
         try:
             self.font = pygame.font.SysFont('Arial', 14)
         except:
             pass  # Font not available
-        
-    def render(self, particles: List[Particle], stats: Optional[dict] = None):
+
+    def render(self, particles: List[Particle], stats: Optional[dict] = None, draw_boundaries: bool = False):
         """
         Renders particles and displays statistics on the screen.
 
         Args:
             particles (List[Particle]): List of particles to render.
             stats (Optional[dict]): Simulation statistics to display.
+            draw_boundaries (bool): Whether to draw thread-separated boundaries.
+            draw_buffers (bool): Whether to draw buffer regions around boundaries.
         """
         self.screen.fill(self.background_color)
-        
+
+        # Draw thread-separated boundaries if enabled
+        if draw_boundaries:
+            partition_width = SCREEN_WIDTH / NUM_THREADS
+            for i in range(1, NUM_THREADS):
+                x = int(i * partition_width)
+
+                # Draw buffer regions
+                buffer_color = (220, 220, 220)  # Light gray for buffer regions
+                buffer_width = max(RADIUS_RANGE) * 2
+                pygame.draw.rect(self.screen, buffer_color, (x - buffer_width, 0, buffer_width * 2, SCREEN_HEIGHT))
+
+                pygame.draw.line(self.screen, (200, 200, 200), (x, 0), (x, SCREEN_HEIGHT), 1)  # Light gray lines
+
         # Draw all particles
         for p in particles:
             pygame.draw.circle(
@@ -577,19 +596,19 @@ class ParticleRenderer:
                 (int(p.x), int(p.y)), 
                 int(p.radius)
             )
-            
-        # Display stats if available
-        if stats and self.font:
+
+        # Display stats if available and valid
+        if isinstance(stats, dict) and self.font:
             fps = 1.0 / stats["avg_frame_time"] if stats["avg_frame_time"] > 0 else 0
             stats_text = f"FPS: {fps:.1f} | Collisions/frame: {stats['avg_collisions']:.1f} | Particles: {len(particles)} | Threads: {NUM_THREADS}"
             avg_stats_text = f"Avg frame time: {stats['avg_frame_time']*1000:.2f} ms, Avg collisions/frame: {stats['avg_collisions']:.2f}" 
-            
+
             text_surface = self.font.render(stats_text, True, FONT_COLOR)
             avg_stats_surface = self.font.render(avg_stats_text, True, FONT_COLOR)
-            
+
             self.screen.blit(text_surface, (10, 10))
             self.screen.blit(avg_stats_surface, (10, 30))
-            
+
         pygame.display.flip()
 
 
@@ -644,6 +663,7 @@ def run_pygame_simulation():
     # Main loop variables
     running = True
     show_stats = True
+    draw_boundaries = False
     stats_update_timer = 0
 
     while running:
@@ -658,6 +678,8 @@ def run_pygame_simulation():
                     running = False 
                 elif event.key == pygame.K_s:  # Toggle stats display
                     show_stats = not show_stats
+                elif event.key == pygame.K_g:  # Toggle stats display
+                    draw_boundaries = not draw_boundaries
                 elif event.key == pygame.K_r:  # Reset simulation
                     particle_system.create_particles(PARTICLE_COUNT)
 
@@ -665,13 +687,13 @@ def run_pygame_simulation():
 
         if show_stats:
             stats = particle_system.get_profiler_stats()
-            renderer.render(particle_system.particles, stats)
+            renderer.render(particle_system.particles, stats, draw_boundaries)
 
             if stats_update_timer >= 1.0:
                 particle_system.profiler.print_stats()
                 stats_update_timer = 0
         else:
-            renderer.render(particle_system.particles)
+            renderer.render(particle_system.particles, draw_boundaries)
 
     pygame.quit()
 
