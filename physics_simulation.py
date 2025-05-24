@@ -9,6 +9,7 @@ from typing import List, Tuple, Optional
 import threading
 from concurrent.futures import ThreadPoolExecutor
 import copy 
+from benchmark import run_benchmark_simulation, run_extended_benchmark
 
 
 # Particle parameters
@@ -622,6 +623,14 @@ def parse_arguments():
         "-p", "--particles", type=int, default=PARTICLE_COUNT,
         help="Number of particles in the simulation (default: 1000)"
     )
+    parser.add_argument(
+        "-b", "--benchmark", action="store_true",
+        help="Run the simulation in benchmark mode (no rendering)"
+    )
+    parser.add_argument(
+        "-e", "--extended_benchmark", action="store_true",
+        help="Run the extended benchmark with multiple configurations"
+    )
     return parser.parse_args()
 
 def run_pygame_simulation():
@@ -698,5 +707,37 @@ def run_pygame_simulation():
     pygame.quit()
 
 
+def main():
+    """
+    Main entry point for the simulation.
+    Parses arguments and runs either the pygame simulation, the benchmark, or the extended benchmark.
+    """
+    args = parse_arguments()  # Parse command-line arguments
+
+    global NUM_THREADS, PARTICLE_COUNT
+    NUM_THREADS = args.threads
+    PARTICLE_COUNT = args.particles
+
+    # Replace the existing benchmarking code with calls to the imported methods
+    if hasattr(args, 'benchmark') and args.benchmark:
+        run_benchmark_simulation(
+            MultithreadedParticleSystem,
+            10.0, 
+            PARTICLE_COUNT, 
+            NUM_THREADS, 
+            SCREEN_WIDTH, 
+            SCREEN_HEIGHT, 
+            FRAME_RATE
+            )  # Run benchmark for 10 seconds
+    elif hasattr(args, 'extended_benchmark') and args.extended_benchmark:
+        run_extended_benchmark(
+            MultithreadedParticleSystem,
+            SCREEN_WIDTH, 
+            SCREEN_HEIGHT, 
+            FRAME_RATE
+        )  # Run extended benchmark
+    else:
+        run_pygame_simulation()
+
 if __name__ == "__main__":
-    run_pygame_simulation()
+    main()

@@ -102,3 +102,9 @@ This project is a particle simulation system implemented in Python. It simulates
 
 ## Future Improvements
 - Add multiprocessing instead, to get parallel processing.
+
+## Demo
+
+Below is a demonstration of the particle simulation in action. Click the image to view the video:
+
+[![Particle Simulation Demo](demo.mp4)](demo.mp4)
