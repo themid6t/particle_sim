@@ -23,12 +23,6 @@ FRAME_RATE = 60               # Frames per second
 
 PARTICLE_COUNT = 1000  # Default number of particles in the simulation
 
-# Adjust parameters based on updated PARTICLE_COUNT
-if PARTICLE_COUNT > 2000:
-    print(f"Warning: High particle count ({PARTICLE_COUNT}) may affect performance.")
-    VELOCITY_RANGE = (-100, 100)  # Adjust velocity range for larger particle counts
-    MASS_RADIUS_RANGE = RADIUS_RANGE = (2, 6)  # Adjust radius range for larger particle counts
-
 # Additional global constants
 NUM_THREADS = 8  # Number of threads for multithreaded simulation
 
@@ -637,9 +631,15 @@ def run_pygame_simulation():
     """
     args = parse_arguments()  # Parse command-line arguments
 
-    global NUM_THREADS, PARTICLE_COUNT
+    global NUM_THREADS, PARTICLE_COUNT, VELOCITY_RANGE, RADIUS_RANGE, MASS_RADIUS_RANGE
     NUM_THREADS = args.threads
     PARTICLE_COUNT = args.particles
+
+    # Adjust parameters based on updated PARTICLE_COUNT
+    if PARTICLE_COUNT > 2000:
+        print(f"Warning: High particle count ({PARTICLE_COUNT}) may affect performance.")
+        VELOCITY_RANGE = (-100, 100)  # Adjust velocity range for larger particle counts
+        MASS_RADIUS_RANGE = RADIUS_RANGE = (2, 4)  # Adjust radius range for larger particle counts
 
     # Initialize pygame
     pygame.init()
