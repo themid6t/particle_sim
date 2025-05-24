@@ -4,6 +4,7 @@ import math
 import time
 from dataclasses import dataclass
 import argparse
+import psutil  # Import psutil for memory tracking
 
 from typing import List, Tuple, Optional
 import threading
@@ -86,6 +87,7 @@ class Profiler:
     def __init__(self):
         self.frame_times = []
         self.collision_counts = []
+        self.memory_usages = []  # Track memory usage
         self._start_time = None
         self._collision_count = 0
         
@@ -104,7 +106,12 @@ class Profiler:
             frame_time = time.time() - self._start_time
             self.frame_times.append(frame_time)
             self.collision_counts.append(self._collision_count)
-            
+
+            # Record overall memory usage for the entire simulation process
+            # process = psutil.Process()
+            # total_memory = process.memory_info().rss / (1024 * 1024)  # Convert to MB
+            # self.memory_usages.append(total_memory)  # Track total memory usage
+
     def record_collision(self):
         """
         Records a collision event for the current frame.
@@ -113,29 +120,32 @@ class Profiler:
         
     def get_stats(self) -> dict:
         """
-        Returns performance statistics, including average frame time and collisions per frame.
+        Returns performance statistics, including average frame time, collisions per frame, and memory usage.
 
         Returns:
-            dict: A dictionary containing average frame time, average collisions, and total frames.
+            dict: A dictionary containing average frame time, average collisions, average memory usage, and total frames.
         """
         if not self.frame_times:
-            return {"avg_frame_time": 0, "avg_collisions": 0}
+            return {"avg_frame_time": 0, "avg_collisions": 0, "avg_memory_usage": 0}
             
         # Keep only the last 100 frames for rolling average
         if len(self.frame_times) > 100:
             self.frame_times = self.frame_times[-100:]
             self.collision_counts = self.collision_counts[-100:]
-            
+            self.memory_usages = self.memory_usages[-100:]
+
         return {
             "avg_frame_time": sum(self.frame_times) / len(self.frame_times),
             "avg_collisions": sum(self.collision_counts) / len(self.collision_counts),
+            # "avg_memory_usage": sum(self.memory_usages) / len(self.memory_usages),
             "total_frames": len(self.frame_times)
         }
         
     def print_stats(self):
         stats = self.get_stats()
         print(f"Avg frame time: {stats['avg_frame_time']*1000:.2f} ms, "
-              f"Avg collisions/frame: {stats['avg_collisions']:.2f}")
+              f"Avg collisions/frame: {stats['avg_collisions']:.2f}, ")
+            #   f"Avg memory usage: {stats['avg_memory_usage']:.2f} MB")
 
 
 class ParticleSystem:
@@ -435,16 +445,6 @@ class MultithreadedParticleSystem(ParticleSystem):
                             updated_partitions[part_idx][local_idx] = updated_p1
                             updated_partitions[neighbor_part_idx][j] = updated_p2
                             p1 = updated_p1  # Update p1 for subsequent checks
-
-    def _partition_particles(self, particles: List[Particle], num_parts: int) -> List[List[Particle]]:
-        """Original partitioning method (for backward compatibility)"""
-        partitions = [[] for _ in range(num_parts)]
-        x_slice_width = self.width / num_parts
-        for p in particles:
-            idx = int(p.x / x_slice_width)
-            idx = max(0, min(num_parts - 1, idx))
-            partitions[idx].append(p)
-        return partitions
         
     def _thread_worker(self, local_particles: List[Particle], dt: float, thread_id: int) -> List[Particle]:
         """Worker function that processes a subset of particles in a thread"""
@@ -671,6 +671,7 @@ def run_pygame_simulation():
 
     # Main loop variables
     running = True
+    paused = False  # Add a paused state
     show_stats = True
     draw_boundaries = False
     stats_update_timer = 0
@@ -685,14 +686,17 @@ def run_pygame_simulation():
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:  # Exit on ESC
                     running = False 
+                elif event.key == pygame.K_SPACE:  # Toggle pause on SPACE
+                    paused = not paused
                 elif event.key == pygame.K_s:  # Toggle stats display
                     show_stats = not show_stats
-                elif event.key == pygame.K_g:  # Toggle stats display
+                elif event.key == pygame.K_g:  # Toggle boundary display
                     draw_boundaries = not draw_boundaries
                 elif event.key == pygame.K_r:  # Reset simulation
                     particle_system.create_particles(PARTICLE_COUNT)
 
-        particle_system.update(dt)
+        if not paused:  # Only update simulation if not paused
+            particle_system.update(dt)
 
         if show_stats:
             stats = particle_system.get_profiler_stats()
