@@ -108,3 +108,28 @@ This project is a particle simulation system implemented in Python. It simulates
 Below is a demonstration of the particle simulation in action. Click the image to view the video:
 
 [![Particle Simulation Demo](demo.mp4)](demo.mp4)
+
+## Benchmarking
+
+The simulation includes benchmarking capabilities to evaluate performance under different configurations. Two types of benchmarks are supported:
+
+1. **Standard Benchmark**:
+   - Run the simulation for a fixed duration with a specified number of particles and threads.
+   - Example:
+     ```bash
+     python physics_simulation.py -b -p 2000 -t 4
+     ```
+     This runs the benchmark with 2000 particles and 4 threads.
+
+2. **Extended Benchmark**:
+   - Run the simulation across multiple configurations of particles and threads.
+   - Example:
+     ```bash
+     python physics_simulation.py -e
+     ```
+     This runs the extended benchmark and saves results to `analysis_results/benchmark_results.json`.
+     And also plots few analysis which can be viewed in `analysis_results/`.
+
+### Benchmark Analysis
+- The `benchmark.py` script includes functions to analyze and visualize benchmark results.
+- Results are saved in JSON format and can be used to generate performance graphs.
